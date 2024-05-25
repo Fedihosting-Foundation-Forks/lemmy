@@ -1,0 +1,222 @@
+# This workflow loosely replicates the logic in .woodpecker.yml
+name: Run Lemmy tests
+on:
+  push:
+    branches:
+      - lw-0.*
+
+env:
+  CI_RUST_VERSION: "1.81"
+  CARGO_HOME: .cargo_home
+  POSTGRES_USER: lemmy
+  POSTGRES_PASSWORD: password
+  HOST_DATABASE_URL: postgres://lemmy:password@127.0.0.1:5432/lemmy
+  CONTAINER_DATABASE_URL: postgres://lemmy:password@database:5432/lemmy
+
+jobs:
+  test:
+    services:
+      database:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lemmy
+          POSTGRES_PASSWORD: password
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          show-progress: "false"
+
+      - name: Prettier
+        uses: docker://tmknom/prettier:3.0.0
+        with:
+          # args is rather janky for this, as it doesn't deal well with quotes
+          # and multiple lines, so it's easier to just put more complex
+          # commands in a custom script.
+          args: ./.github/scripts/prettier.sh
+
+      - name: TOML fmt
+        uses: docker://tamasfe/taplo:0.8.1
+        with:
+          args: format --check
+
+      - name: SQL fmt
+        uses: docker://backplane/pgformatter:latest
+        with:
+          args: ./scripts/sql_format_check.sh
+
+      - name: Get date for cache key
+        id: get-date
+        run: |
+          echo "date=$(/bin/date -u "+%Y%m%d")" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies from apt
+        run: sudo apt-get update && sudo apt-get install -y bash curl postgresql-client
+
+      - name: Cargo home cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CARGO_HOME }}
+          key: rust-cargo-home-${{ env.CI_RUST_VERSION }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            rust-cargo-home-${{ env.CI_RUST_VERSION }}-
+            rust-cargo-home-
+
+      # https://github.com/rust-lang/rustup/issues/2886
+      - name: Disable rustup self update
+        run: rustup set auto-self-update disable
+
+      - name: Set Rust version to ${{ env.CI_RUST_VERSION }}
+        run: rustup default "$CI_RUST_VERSION"
+
+      - name: Install Rust nightly toolchain
+        run: rustup toolchain install nightly
+
+      - name: Cargo fmt
+        run: |
+          rustup component add --toolchain nightly rustfmt
+          cargo +nightly fmt -- --check
+
+      # Unlike Lemmy's woodpecker, we have persistent CARGO_HOME. This causes
+      # some issues with machete, but it doesn't have a way to exclude
+      # arbitrary paths, so we cheat by temporarily moving it into the
+      # target dir.
+      # https://github.com/bnjbvr/cargo-machete/issues/49
+      - name: Cargo machete
+        env:
+          CARGO_HOME: target/${{ env.CARGO_HOME }}
+          ORIG_CARGO_HOME: ${{ env.CARGO_HOME }}
+        run: |
+          test -d "$ORIG_CARGO_HOME" && mkdir -v target && mv -v "$ORIG_CARGO_HOME" "$CARGO_HOME" || true
+          cargo +nightly install cargo-machete
+          cargo +nightly machete --skip-target-dir
+          mv -v "$CARGO_HOME" "$ORIG_CARGO_HOME" && rmdir -v target
+
+      - name: Ignored files
+        uses: docker://alpine:3
+        with:
+          args: ./.github/scripts/ignored-files.sh
+
+      - name: check_api_common_default_features
+        run: cargo check --package lemmy_api_common
+
+      - name: lemmy_api_common_doesnt_depend_on_diesel
+        run: |
+          ! cargo tree -p lemmy_api_common --no-default-features -i diesel
+
+      - name: lemmy_api_common_works_with_wasm
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo check --target wasm32-unknown-unknown -p lemmy_api_common
+
+      - name: check_defaults_hjson_updated
+        env:
+          LEMMY_CONFIG_LOCATION: ./config/config.hjson
+        run: |
+          ./scripts/update_config_defaults.sh config/defaults_current.hjson
+          diff config/defaults.hjson config/defaults_current.hjson
+
+      - name: Install diesel cli
+        run: cargo install --locked diesel_cli@2.2.8 --no-default-features --features postgres
+
+      - name: Check diesel schema
+        env:
+          DATABASE_URL: ${{ env.HOST_DATABASE_URL }}
+        run: |
+          set -euxo pipefail
+          export PATH="$CARGO_HOME/bin:$PATH"
+          diesel migration run
+          diesel print-schema --config-file=diesel.toml > tmp.schema
+          diff tmp.schema crates/db_schema/src/schema.rs
+
+      - name: Check DB performance
+        env:
+          DATABASE_URL: ${{ env.HOST_DATABASE_URL }}
+          LEMMY_CONFIG_LOCATION: ./config/config.hjson
+          RUST_BACKTRACE: "1"
+        run: cargo run --package lemmy_db_perf -- --posts 10 --read-post-pages 1
+
+      - name: Cargo clippy
+        run: |
+          rustup component add clippy
+          cargo clippy --workspace --tests --all-targets --features console -- -D warnings
+
+      - name: Cargo build
+        run: |
+          cargo build
+          mv target/debug/lemmy_server target/lemmy_server
+
+      - name: Cargo test
+        env:
+          RUST_BACKTRACE: "1"
+          LEMMY_CONFIG_LOCATION: ../../config/config.hjson
+          LEMMY_DATABASE_URL: ${{ env.HOST_DATABASE_URL }}
+          LEMMY_TEST_FAST_FEDERATION: "1"
+        run: cargo test --workspace --no-fail-fast
+
+      - name: Check diesel migration
+        env:
+          RUST_BACKTRACE: "1"
+          DATABASE_URL: ${{ env.HOST_DATABASE_URL }}
+          LEMMY_DATABASE_URL: ${{ env.HOST_DATABASE_URL }}
+          PGUSER: ${{ env.POSTGRES_USER }}
+          PGPASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          PGHOST: 127.0.0.1
+          PGDATABASE: lemmy
+        run: |
+          set -euxo pipefail
+          export PATH="$CARGO_HOME/bin:$PATH"
+          # aliases don't work in non-interactive shells by default
+          shopt -s expand_aliases
+          # Run all migrations
+          diesel migration run
+          psql -c "DROP SCHEMA IF EXISTS r CASCADE;"
+          pg_dump --no-owner --no-privileges --no-table-access-method --schema-only --no-sync -f before.sqldump
+          # Make sure that the newest migration is revertable without the `r` schema
+          diesel migration redo
+          # Run schema setup twice, which fails on the 2nd time if `DROP SCHEMA IF EXISTS r CASCADE` drops the wrong things
+          alias lemmy_schema_setup="target/lemmy_server --disable-scheduled-tasks --disable-http-server --disable-activity-sending"
+          lemmy_schema_setup
+          lemmy_schema_setup
+          # Make sure that the newest migration is revertable with the `r` schema
+          diesel migration redo
+          # Check for changes in the schema, which would be caused by an incorrect migration
+          psql -c "DROP SCHEMA IF EXISTS r CASCADE;"
+          pg_dump --no-owner --no-privileges --no-table-access-method --schema-only --no-sync -f after.sqldump
+          diff before.sqldump after.sqldump
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+          package_json_file: api_tests/package.json
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: pnpm
+          cache-dependency-path: api_tests/pnpm-lock.yaml
+
+      - name: Run federation tests
+        env:
+          DO_WRITE_HOSTS_FILE: "1"
+          LEMMY_DATABASE_URL: postgres://${{ env.POSTGRES_USER }}:${{ env.POSTGRES_PASSWORD }}@127.0.0.1:5432
+        run: |
+          set -euxo pipefail
+          sed -i -e 's#>>/etc/hosts#| sudo tee -a /etc/hosts#' api_tests/prepare-drone-federation-test.sh
+          bash api_tests/prepare-drone-federation-test.sh
+          cd api_tests/
+          pnpm i
+          pnpm api-test
