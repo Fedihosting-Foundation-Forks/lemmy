@@ -43,7 +43,10 @@ pub async fn ban_from_community(
     &mut context.pool(),
   )
   .await?;
-  is_valid_body_field(&data.reason, false)?;
+
+  if let Some(reason) = &data.reason {
+    is_valid_body_field(reason, false)?;
+  }
 
   let community_user_ban_form = CommunityPersonBanForm {
     community_id: data.community_id,
@@ -89,7 +92,9 @@ pub async fn ban_from_community(
 
   ModBanFromCommunity::create(&mut context.pool(), &form).await?;
 
-  let person_view = PersonView::read(&mut context.pool(), data.person_id).await?;
+  let person_view = PersonView::read(&mut context.pool(), data.person_id)
+    .await?
+    .ok_or(LemmyErrorType::CouldntFindPerson)?;
 
   ActivityChannel::submit_activity(
     SendActivityData::BanFromCommunity {

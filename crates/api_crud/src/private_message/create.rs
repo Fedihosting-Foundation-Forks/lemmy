@@ -39,7 +39,7 @@ pub async fn create_private_message(
   let slur_regex = local_site_to_slur_regex(&local_site);
   let url_blocklist = get_url_blocklist(&context).await?;
   let content = process_markdown(&data.content, &slur_regex, &url_blocklist, &context).await?;
-  is_valid_body_field(&Some(content.clone()), false)?;
+  is_valid_body_field(&content, false)?;
 
   check_person_block(
     local_user_view.person.id,
@@ -76,12 +76,16 @@ pub async fn create_private_message(
   .await
   .with_lemmy_type(LemmyErrorType::CouldntCreatePrivateMessage)?;
 
-  let view = PrivateMessageView::read(&mut context.pool(), inserted_private_message.id).await?;
+  let view = PrivateMessageView::read(&mut context.pool(), inserted_private_message.id)
+    .await?
+    .ok_or(LemmyErrorType::CouldntFindPrivateMessage)?;
 
   // Send email to the local recipient, if one exists
   if view.recipient.local {
     let recipient_id = data.recipient_id;
-    let local_recipient = LocalUserView::read_person(&mut context.pool(), recipient_id).await?;
+    let local_recipient = LocalUserView::read_person(&mut context.pool(), recipient_id)
+      .await?
+      .ok_or(LemmyErrorType::CouldntFindPerson)?;
     let lang = get_interface_language(&local_recipient);
     let inbox_link = format!("{}/inbox", context.settings().get_protocol_and_hostname());
     let sender_name = &local_user_view.person.name;

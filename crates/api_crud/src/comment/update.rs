@@ -36,7 +36,9 @@ pub async fn update_comment(
   let local_site = LocalSite::read(&mut context.pool()).await?;
 
   let comment_id = data.comment_id;
-  let orig_comment = CommentView::read(&mut context.pool(), comment_id, None).await?;
+  let orig_comment = CommentView::read(&mut context.pool(), comment_id, None)
+    .await?
+    .ok_or(LemmyErrorType::CouldntFindComment)?;
 
   check_community_user_action(
     &local_user_view.person,
@@ -61,7 +63,9 @@ pub async fn update_comment(
   let slur_regex = local_site_to_slur_regex(&local_site);
   let url_blocklist = get_url_blocklist(&context).await?;
   let content = process_markdown_opt(&data.content, &slur_regex, &url_blocklist, &context).await?;
-  is_valid_body_field(&content, false)?;
+  if let Some(content) = &content {
+    is_valid_body_field(content, false)?;
+  }
 
   let comment_id = data.comment_id;
   let form = CommentUpdateForm {

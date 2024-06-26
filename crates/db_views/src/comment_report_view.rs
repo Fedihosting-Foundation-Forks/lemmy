@@ -134,7 +134,7 @@ fn queries<'a>() -> Queries<
       comment_report::table.find(report_id).into_boxed(),
       my_person_id,
     )
-    .first::<CommentReportView>(&mut conn)
+    .first(&mut conn)
     .await
   };
 
@@ -150,7 +150,8 @@ fn queries<'a>() -> Queries<
       query = query.filter(comment_report::comment_id.eq(comment_id));
     }
 
-    // If viewing all reports, order by newest, but if viewing unresolved only, show the oldest first (FIFO)
+    // If viewing all reports, order by newest, but if viewing unresolved only, show the oldest
+    // first (FIFO)
     if options.unresolved_only {
       query = query
         .filter(comment_report::resolved.eq(false))
@@ -191,7 +192,7 @@ impl CommentReportView {
     pool: &mut DbPool<'_>,
     report_id: CommentReportId,
     my_person_id: PersonId,
-  ) -> Result<Self, Error> {
+  ) -> Result<Option<Self>, Error> {
     queries().read(pool, (report_id, my_person_id)).await
   }
 
@@ -296,11 +297,7 @@ mod tests {
       .await
       .unwrap();
 
-    let new_person = PersonInsertForm::builder()
-      .name("timmy_crv".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let new_person = PersonInsertForm::test_form(inserted_instance.id, "timmy_crv");
 
     let inserted_timmy = Person::create(pool, &new_person).await.unwrap();
 
@@ -318,20 +315,12 @@ mod tests {
       counts: Default::default(),
     };
 
-    let new_person_2 = PersonInsertForm::builder()
-      .name("sara_crv".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let new_person_2 = PersonInsertForm::test_form(inserted_instance.id, "sara_crv");
 
     let inserted_sara = Person::create(pool, &new_person_2).await.unwrap();
 
     // Add a third person, since new ppl can only report something once.
-    let new_person_3 = PersonInsertForm::builder()
-      .name("jessica_crv".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let new_person_3 = PersonInsertForm::test_form(inserted_instance.id, "jessica_crv");
 
     let inserted_jessica = Person::create(pool, &new_person_3).await.unwrap();
 
@@ -396,11 +385,13 @@ mod tests {
 
     let agg = CommentAggregates::read(pool, inserted_comment.id)
       .await
+      .unwrap()
       .unwrap();
 
     let read_jessica_report_view =
       CommentReportView::read(pool, inserted_jessica_report.id, inserted_timmy.id)
         .await
+        .unwrap()
         .unwrap();
     let expected_jessica_report_view = CommentReportView {
       comment_report: inserted_jessica_report.clone(),
@@ -554,6 +545,7 @@ mod tests {
     let read_jessica_report_view_after_resolve =
       CommentReportView::read(pool, inserted_jessica_report.id, inserted_timmy.id)
         .await
+        .unwrap()
         .unwrap();
 
     let mut expected_jessica_report_view_after_resolve = expected_jessica_report_view;

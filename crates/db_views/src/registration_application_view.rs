@@ -42,14 +42,15 @@ fn queries<'a>() -> Queries<
         .find(registration_application_id)
         .into_boxed(),
     )
-    .first::<RegistrationApplicationView>(&mut conn)
+    .first(&mut conn)
     .await
   };
 
   let list = move |mut conn: DbConn<'a>, options: RegistrationApplicationQuery| async move {
     let mut query = all_joins(registration_application::table.into_boxed());
 
-    // If viewing all applications, order by newest, but if viewing unresolved only, show the oldest first (FIFO)
+    // If viewing all applications, order by newest, but if viewing unresolved only, show the oldest
+    // first (FIFO)
     if options.unread_only {
       query = query
         .filter(registration_application::admin_id.is_null())
@@ -76,7 +77,7 @@ impl RegistrationApplicationView {
   pub async fn read(
     pool: &mut DbPool<'_>,
     registration_application_id: i32,
-  ) -> Result<Self, Error> {
+  ) -> Result<Option<Self>, Error> {
     queries().read(pool, registration_application_id).await
   }
 
@@ -162,11 +163,7 @@ mod tests {
       .await
       .unwrap();
 
-    let timmy_person_form = PersonInsertForm::builder()
-      .name("timmy_rav".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let timmy_person_form = PersonInsertForm::test_form(inserted_instance.id, "timmy_rav");
 
     let inserted_timmy_person = Person::create(pool, &timmy_person_form).await.unwrap();
 
@@ -180,11 +177,7 @@ mod tests {
       .await
       .unwrap();
 
-    let sara_person_form = PersonInsertForm::builder()
-      .name("sara_rav".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let sara_person_form = PersonInsertForm::test_form(inserted_instance.id, "sara_rav");
 
     let inserted_sara_person = Person::create(pool, &sara_person_form).await.unwrap();
 
@@ -209,13 +202,10 @@ mod tests {
 
     let read_sara_app_view = RegistrationApplicationView::read(pool, sara_app.id)
       .await
+      .unwrap()
       .unwrap();
 
-    let jess_person_form = PersonInsertForm::builder()
-      .name("jess_rav".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let jess_person_form = PersonInsertForm::test_form(inserted_instance.id, "jess_rav");
 
     let inserted_jess_person = Person::create(pool, &jess_person_form).await.unwrap();
 
@@ -240,6 +230,7 @@ mod tests {
 
     let read_jess_app_view = RegistrationApplicationView::read(pool, jess_app.id)
       .await
+      .unwrap()
       .unwrap();
 
     let mut expected_sara_app_view = RegistrationApplicationView {
@@ -343,6 +334,7 @@ mod tests {
 
     let read_sara_app_view_after_approve = RegistrationApplicationView::read(pool, sara_app.id)
       .await
+      .unwrap()
       .unwrap();
 
     // Make sure the columns changed

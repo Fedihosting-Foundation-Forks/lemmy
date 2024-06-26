@@ -178,7 +178,7 @@ diesel::table! {
         icon -> Nullable<Text>,
         banner -> Nullable<Text>,
         #[max_length = 255]
-        followers_url -> Varchar,
+        followers_url -> Nullable<Varchar>,
         #[max_length = 255]
         inbox_url -> Varchar,
         #[max_length = 255]
@@ -306,6 +306,15 @@ diesel::table! {
         fail_count -> Int4,
         last_retry -> Nullable<Timestamptz>,
         last_successful_published_time -> Nullable<Timestamptz>,
+    }
+}
+
+diesel::table! {
+    image_details (link) {
+        link -> Text,
+        width -> Int4,
+        height -> Int4,
+        content_type -> Text,
     }
 }
 
@@ -849,8 +858,7 @@ diesel::table! {
 }
 
 diesel::table! {
-    remote_image (id) {
-        id -> Int4,
+    remote_image (link) {
         link -> Text,
         published -> Timestamptz,
     }
@@ -1055,6 +1063,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     federation_allowlist,
     federation_blocklist,
     federation_queue_state,
+    image_details,
     instance,
     instance_block,
     language,

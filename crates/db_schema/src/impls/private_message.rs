@@ -1,5 +1,5 @@
 use crate::{
-  diesel::DecoratableTarget,
+  diesel::{DecoratableTarget, OptionalExtension},
   newtypes::{DbUrl, PersonId, PrivateMessageId},
   schema::private_message,
   source::private_message::{PrivateMessage, PrivateMessageInsertForm, PrivateMessageUpdateForm},
@@ -9,7 +9,6 @@ use crate::{
 use chrono::{DateTime, Utc};
 use diesel::{dsl::insert_into, result::Error, ExpressionMethods, QueryDsl};
 use diesel_async::RunQueryDsl;
-use lemmy_utils::error::LemmyResult;
 use url::Url;
 
 #[async_trait]
@@ -74,17 +73,14 @@ impl PrivateMessage {
   pub async fn read_from_apub_id(
     pool: &mut DbPool<'_>,
     object_id: Url,
-  ) -> LemmyResult<Option<Self>> {
+  ) -> Result<Option<Self>, Error> {
     let conn = &mut get_conn(pool).await?;
     let object_id: DbUrl = object_id.into();
-    Ok(
-      private_message::table
-        .filter(private_message::ap_id.eq(object_id))
-        .first::<PrivateMessage>(conn)
-        .await
-        .ok()
-        .map(Into::into),
-    )
+    private_message::table
+      .filter(private_message::ap_id.eq(object_id))
+      .first(conn)
+      .await
+      .optional()
   }
 }
 
@@ -115,19 +111,11 @@ mod tests {
       .await
       .unwrap();
 
-    let creator_form = PersonInsertForm::builder()
-      .name("creator_pm".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let creator_form = PersonInsertForm::test_form(inserted_instance.id, "creator_pm");
 
     let inserted_creator = Person::create(pool, &creator_form).await.unwrap();
 
-    let recipient_form = PersonInsertForm::builder()
-      .name("recipient_pm".into())
-      .public_key("pubkey".to_string())
-      .instance_id(inserted_instance.id)
-      .build();
+    let recipient_form = PersonInsertForm::test_form(inserted_instance.id, "recipient_pm");
 
     let inserted_recipient = Person::create(pool, &recipient_form).await.unwrap();
 
@@ -156,6 +144,7 @@ mod tests {
 
     let read_private_message = PrivateMessage::read(pool, inserted_private_message.id)
       .await
+      .unwrap()
       .unwrap();
 
     let private_message_update_form = PrivateMessageUpdateForm {
