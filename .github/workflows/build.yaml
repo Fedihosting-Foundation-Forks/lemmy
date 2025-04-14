@@ -62,6 +62,7 @@ jobs:
           file: docker/Dockerfile
           build-args: |
             RUST_RELEASE_MODE=release
+            CARGO_BUILD_FEATURES=opentelemetry
           platforms: linux/amd64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
