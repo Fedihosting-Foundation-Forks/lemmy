@@ -4,7 +4,7 @@ pub mod prometheus_metrics;
 pub mod root_span_builder;
 pub mod scheduled_tasks;
 pub mod session_middleware;
-#[cfg(feature = "console")]
+#[cfg(feature = "opentelemetry")]
 pub mod telemetry;
 
 use crate::{
@@ -406,10 +406,10 @@ pub fn init_logging(settings: &Settings) -> LemmyResult<()> {
       .with(ErrorLayer::default());
 
     if let Some(_url) = &settings.opentelemetry_url {
-      #[cfg(feature = "console")]
+      #[cfg(feature = "opentelemetry")]
       telemetry::init_tracing(_url.as_ref(), subscriber, targets)?;
-      #[cfg(not(feature = "console"))]
-      tracing::error!("Feature `console` must be enabled for opentelemetry tracing");
+      #[cfg(not(feature = "opentelemetry"))]
+      tracing::error!("Feature `opentelemetry` must be enabled for opentelemetry tracing");
     } else {
       set_global_default(subscriber)?;
     }
@@ -424,10 +424,10 @@ pub fn init_logging(settings: &Settings) -> LemmyResult<()> {
       .with(ErrorLayer::default());
 
     if let Some(_url) = &settings.opentelemetry_url {
-      #[cfg(feature = "console")]
+      #[cfg(feature = "opentelemetry")]
       telemetry::init_tracing(_url.as_ref(), subscriber, targets)?;
-      #[cfg(not(feature = "console"))]
-      tracing::error!("Feature `console` must be enabled for opentelemetry tracing");
+      #[cfg(not(feature = "opentelemetry"))]
+      tracing::error!("Feature `opentelemetry` must be enabled for opentelemetry tracing");
     } else {
       set_global_default(subscriber)?;
     }
