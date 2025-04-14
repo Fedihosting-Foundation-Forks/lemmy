@@ -127,9 +127,8 @@ jobs:
           ./scripts/update_config_defaults.sh config/defaults_current.hjson
           diff config/defaults.hjson config/defaults_current.hjson
 
-      # Use --locked to ensure compatibility with rust 1.80
       - name: Install diesel cli
-        run: cargo install diesel_cli --locked --no-default-features --features postgres
+        run: cargo install --locked diesel_cli@2.2.8 --no-default-features --features postgres
 
       - name: Check diesel schema
         env:
