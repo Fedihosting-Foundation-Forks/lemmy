@@ -3,9 +3,12 @@ on:
   push:
     branches:
       - lw-0.*
+
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}/${{ github.ref_name }}
+  CI_RUST_VERSION: 1.80
+
 jobs:
   build-and-push-image:
     runs-on: ubuntu-latest
@@ -39,18 +42,30 @@ jobs:
           username: ${{ github.repository_owner }}
           password: ${{ github.token }}
 
-      - name: Cache
+      - name: Cargo home cache
+        uses: actions/cache@v4
+        with:
+          path: volumes/cache-cargo-home
+          key: rust-cargo-home-${{ env.CI_RUST_VERSION }}-${{ hashFiles('**/Cargo.toml', '**/Cargo.lock') }}
+          restore-keys: |
+            rust-cargo-home-${{ env.CI_RUST_VERSION }}-
+            rust-cargo-home-
+
+      - name: Rust target cache
         uses: actions/cache@v4
         id: cache
         with:
           path: volumes/cache-lemmy-target
-          key: cache-${{ hashFiles('docker/Dockerfile') }}
+          key: rust-target-${{ env.CI_RUST_VERSION }}-${{ hashFiles('docker/Dockerfile') }}
+          restore-keys: |
+            rust-target-${{ env.CI_RUST_VERSION }}-
 
       - name: Inject cache into docker
         uses: reproducible-containers/buildkit-cache-dance@v3.1.2
         with:
           cache-map: |
             {
+              "volumes/cache-cargo-home": "/root/.cargo",
               "volumes/cache-lemmy-target": "/lemmy/target"
             }
           skip-extraction: ${{ steps.cache.outputs.cache-hit }}

@@ -27,14 +27,14 @@ WORKDIR /lemmy
 COPY . ./
 
 # Debug build
-RUN --mount=type=cache,target=/lemmy/target set -ex; \
+RUN --mount=type=cache,target=/lemmy/target --mount=type=cache,target=/root/.cargo set -ex; \
     if [ "${RUST_RELEASE_MODE}" = "debug" ]; then \
         cargo build --features "${CARGO_BUILD_FEATURES}"; \
         mv target/"${RUST_RELEASE_MODE}"/lemmy_server ./lemmy_server; \
     fi
 
 # Release build
-RUN --mount=type=cache,target=/lemmy/target set -ex; \
+RUN --mount=type=cache,target=/lemmy/target --mount=type=cache,target=/root/.cargo set -ex; \
     if [ "${RUST_RELEASE_MODE}" = "release" ]; then \
         # cargo clean --release;
         cargo build --features "${CARGO_BUILD_FEATURES}" --release; \
