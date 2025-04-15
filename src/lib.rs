@@ -51,7 +51,7 @@ use mimalloc::MiMalloc;
 use prometheus::default_registry;
 use prometheus_metrics::serve_prometheus;
 use reqwest_middleware::ClientBuilder;
-use reqwest_tracing::TracingMiddleware;
+use reqwest_tracing::{SpanBackendWithUrl, TracingMiddleware};
 use serde_json::json;
 use std::{env, ops::Deref, time::Duration};
 use tokio::signal::unix::SignalKind;
@@ -160,7 +160,7 @@ pub async fn start_lemmy_server(args: CmdArgs) -> LemmyResult<()> {
   );
 
   let client = ClientBuilder::new(client_builder(&SETTINGS).build()?)
-    .with(TracingMiddleware::default())
+    .with(TracingMiddleware::<SpanBackendWithUrl>::new())
     .build();
   let context = LemmyContext::create(
     pool.clone(),
@@ -300,7 +300,7 @@ fn create_http_server(
 
   // Pictrs cannot use proxy
   let pictrs_client = ClientBuilder::new(client_builder(&SETTINGS).no_proxy().build()?)
-    .with(TracingMiddleware::default())
+    .with(TracingMiddleware::<SpanBackendWithUrl>::new())
     .build();
 
   // Create Http server
