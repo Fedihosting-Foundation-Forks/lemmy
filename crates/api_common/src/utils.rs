@@ -414,6 +414,7 @@ pub fn honeypot_check(honeypot: &Option<String>) -> LemmyResult<()> {
   }
 }
 
+#[tracing::instrument(skip_all)]
 pub async fn send_email_to_user(
   local_user_view: &LocalUserView,
   subject: &str,

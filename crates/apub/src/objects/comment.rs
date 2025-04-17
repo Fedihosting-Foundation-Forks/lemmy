@@ -64,7 +64,7 @@ impl Object for ApubComment {
     None
   }
 
-  #[tracing::instrument(skip_all)]
+  #[tracing::instrument(skip(context))]
   async fn read_from_id(
     object_id: Url,
     context: &Data<Self::DataType>,

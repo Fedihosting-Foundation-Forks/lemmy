@@ -91,6 +91,7 @@ pub async fn approve_registration_application(
   }))
 }
 
+#[tracing::instrument(skip_all)]
 async fn send_application_approved_email(
   user: &LocalUserView,
   settings: &Settings,
@@ -102,6 +103,7 @@ async fn send_application_approved_email(
   send_email(&subject, email, &user.person.name, &body, settings).await
 }
 
+#[tracing::instrument(skip_all)]
 async fn send_application_denied_email(
   user: &LocalUserView,
   settings: &Settings,
