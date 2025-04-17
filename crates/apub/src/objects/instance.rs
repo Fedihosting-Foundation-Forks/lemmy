@@ -78,7 +78,7 @@ impl Object for ApubSite {
     Some(self.last_refreshed_at)
   }
 
-  #[tracing::instrument(skip_all)]
+  #[tracing::instrument(skip(data))]
   async fn read_from_id(object_id: Url, data: &Data<Self::DataType>) -> LemmyResult<Option<Self>> {
     Ok(
       Site::read_from_apub_id(&mut data.pool(), &object_id.into())
