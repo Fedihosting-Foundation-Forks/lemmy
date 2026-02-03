@@ -90,6 +90,26 @@ pub async fn setup(context: LemmyContext) -> LemmyResult<()> {
     }
   });
 
+  // FHF auto-resolve reports
+  if context
+    .settings()
+    .fhf_automod_config
+    .resolve_banned_or_deleted_creators_reports
+  {
+    if let Some(automod_username) = &context.settings().fhf_automod_config.actor_username {
+      info!("[FHF AutoMod][ResolveReports] Scheduling automatic resolution of reports");
+      let context_1 = context.clone();
+      let automod_username_1 = automod_username.clone();
+      scheduler.every(CTimeUnits::minutes(1)).run(move || {
+        let context_2 = context_1.clone();
+        let automod_username_2 = automod_username_1.clone();
+        async move {
+          fhf_auto_resolve_reports(&mut context_2.pool(), automod_username_2).await;
+        }
+      });
+    };
+  };
+
   // Manually run the scheduler in an event loop
   loop {
     scheduler.run_pending().await;
@@ -644,6 +664,131 @@ async fn build_update_instance_form(
   .await;
 
   Some(instance_form)
+}
+
+/// Mark reports of removed or deleted content by banned or deleted creators as resolved
+#[tracing::instrument(skip(pool))]
+async fn fhf_auto_resolve_reports(pool: &mut DbPool<'_>, automod_username: String) {
+  // keep these here to minimize risk of merge conflicts with upstream
+  use diesel::{BoolExpressionMethods, JoinOnDsl};
+  use lemmy_db_schema::{
+    newtypes::{CommentReportId, PostReportId, PrivateMessageReportId},
+    schema::{comment_report, person, post_report, private_message, private_message_report},
+    source::{
+      comment_report::CommentReport,
+      person::Person,
+      post_report::PostReport,
+      private_message_report::PrivateMessageReport,
+    },
+    traits::{ApubActor, Reportable},
+  };
+
+  info!("[FHF AutoMod][ResolveReports] Resolving reports of removed content by banned users...");
+  let conn = get_conn(pool).await;
+
+  match conn {
+    Ok(mut conn) => {
+      if let Ok(Some(automod_person)) =
+        Person::read_from_name(&mut (&mut conn).into(), automod_username.as_str(), false).await
+      {
+        let resolvable_post_reports = post_report::table
+          .inner_join(post::table)
+          .inner_join(person::table.on(post::creator_id.eq(person::id)))
+          .filter(post_report::resolved.eq(false))
+          .filter(post_report::resolver_id.is_null())
+          .filter(post::removed.eq(true).or(post::deleted.eq(true)))
+          .filter(person::banned.eq(true).or(person::deleted.eq(true)))
+          .select(post_report::id)
+          .load::<PostReportId>(&mut conn)
+          .await;
+
+        if let Ok(resolvable_post_reports) = resolvable_post_reports {
+          if !resolvable_post_reports.is_empty() {
+            info!(
+              "[FHF AutoMod][ResolveReports] Resolving {} post reports",
+              resolvable_post_reports.len()
+            );
+          }
+          for resolvable_post_report in resolvable_post_reports {
+            PostReport::resolve(
+              &mut (&mut conn).into(),
+              resolvable_post_report,
+              automod_person.id,
+            )
+            .await
+            .ok();
+          }
+        }
+
+        let resolvable_comment_reports = comment_report::table
+          .inner_join(comment::table)
+          .inner_join(person::table.on(comment::creator_id.eq(person::id)))
+          .filter(comment_report::resolved.eq(false))
+          .filter(comment_report::resolver_id.is_null())
+          .filter(comment::removed.eq(true).or(comment::deleted.eq(true)))
+          .filter(person::banned.eq(true).or(person::deleted.eq(true)))
+          .select(comment_report::id)
+          .load::<CommentReportId>(&mut conn)
+          .await;
+
+        if let Ok(resolvable_comment_reports) = resolvable_comment_reports {
+          if !resolvable_comment_reports.is_empty() {
+            info!(
+              "[FHF AutoMod][ResolveReports] Resolving {} comment reports",
+              resolvable_comment_reports.len()
+            );
+          }
+          for resolvable_comment_report in resolvable_comment_reports {
+            CommentReport::resolve(
+              &mut (&mut conn).into(),
+              resolvable_comment_report,
+              automod_person.id,
+            )
+            .await
+            .ok();
+          }
+        }
+
+        let resolvable_private_message_reports = private_message_report::table
+          .inner_join(private_message::table)
+          .inner_join(person::table.on(private_message::creator_id.eq(person::id)))
+          .filter(private_message_report::resolved.eq(false))
+          .filter(private_message_report::resolver_id.is_null())
+          .filter(
+            private_message::removed
+              .eq(true)
+              .or(private_message::deleted.eq(true)),
+          )
+          .filter(person::banned.eq(true).or(person::deleted.eq(true)))
+          .select(private_message_report::id)
+          .load::<PrivateMessageReportId>(&mut conn)
+          .await;
+
+        if let Ok(resolvable_private_message_reports) = resolvable_private_message_reports {
+          if !resolvable_private_message_reports.is_empty() {
+            info!(
+              "[FHF AutoMod][ResolveReports] Resolving {} private message reports",
+              resolvable_private_message_reports.len()
+            );
+          }
+          for resolvable_private_message_report in resolvable_private_message_reports {
+            PrivateMessageReport::resolve(
+              &mut (&mut conn).into(),
+              resolvable_private_message_report,
+              automod_person.id,
+            )
+            .await
+            .ok();
+          }
+        } else {
+          error!("[FHF AutoMod][ResolveReports] Failed to fetch automod user from DB");
+        }
+      }
+    }
+    Err(e) => {
+      error!("Failed to get connection from pool: {e}");
+    }
+  }
 }
 
 #[cfg(test)]
