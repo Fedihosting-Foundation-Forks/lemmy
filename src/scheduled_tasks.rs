@@ -99,6 +99,7 @@ pub async fn setup(context: LemmyContext) -> LemmyResult<()> {
 
 /// Update the hot_rank columns for the aggregates tables
 /// Runs in batches until all necessary rows are updated once
+#[tracing::instrument(skip_all)]
 async fn update_hot_ranks(pool: &mut DbPool<'_>) {
   info!("Updating hot ranks for all history...");
 
@@ -142,6 +143,7 @@ struct HotRanksUpdateResult {
 /// In `where_clause` and `set_clause`, "a" will refer to the current aggregates table.
 /// Locked rows are skipped in order to prevent deadlocks (they will likely get updated on the next
 /// run)
+#[tracing::instrument(skip(conn))]
 async fn process_ranks_in_batches(
   conn: &mut AsyncPgConnection,
   table_name: &str,
@@ -198,6 +200,7 @@ async fn process_ranks_in_batches(
 
 /// Post aggregates is a special case, since it needs to join to the community_aggregates
 /// table, to get the active monthly user counts.
+#[tracing::instrument(skip_all)]
 async fn process_post_aggregates_ranks_in_batches(conn: &mut AsyncPgConnection) {
   let process_start_time: DateTime<Utc> = Utc
     .timestamp_opt(0, 0)
@@ -246,6 +249,7 @@ async fn process_post_aggregates_ranks_in_batches(conn: &mut AsyncPgConnection) 
   );
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_expired_captcha_answers(pool: &mut DbPool<'_>) {
   let conn = get_conn(pool).await;
 
@@ -270,6 +274,7 @@ async fn delete_expired_captcha_answers(pool: &mut DbPool<'_>) {
 }
 
 /// Clear old activities (this table gets very large)
+#[tracing::instrument(skip_all)]
 async fn clear_old_activities(pool: &mut DbPool<'_>) {
   info!("Clearing old activities...");
   let conn = get_conn(pool).await;
@@ -300,6 +305,7 @@ async fn clear_old_activities(pool: &mut DbPool<'_>) {
   }
 }
 
+#[tracing::instrument(skip_all)]
 async fn delete_old_denied_users(pool: &mut DbPool<'_>) {
   LocalUser::delete_old_denied_local_users(pool)
     .await
@@ -311,6 +317,7 @@ async fn delete_old_denied_users(pool: &mut DbPool<'_>) {
 }
 
 /// overwrite posts and comments 30d after deletion
+#[tracing::instrument(skip_all)]
 async fn overwrite_deleted_posts_and_comments(pool: &mut DbPool<'_>) {
   info!("Overwriting deleted posts...");
   let conn = get_conn(pool).await;
@@ -377,6 +384,7 @@ struct CommunityAggregatesUpdateResult {
 }
 
 /// Re-calculate the site and community active counts for a given interval
+#[tracing::instrument(skip_all)]
 async fn active_counts(pool: &mut DbPool<'_>, interval: (&str, &str)) {
   info!(
     "Updating active site and community aggregates for {}...",
@@ -508,6 +516,7 @@ async fn process_community_aggregates(conn: &mut AsyncPgConnection, interval: (&
 }
 
 /// Set banned to false after ban expires
+#[tracing::instrument(skip_all)]
 async fn update_banned_when_expired(pool: &mut DbPool<'_>) {
   info!("Updating banned column if it expires ...");
   let conn = get_conn(pool).await;
@@ -545,6 +554,7 @@ async fn update_banned_when_expired(pool: &mut DbPool<'_>) {
 /// https://github.com/jhass/nodeinfo/blob/main/PROTOCOL.md
 ///
 /// TODO: if instance has been dead for a long time, it should be checked less frequently
+#[tracing::instrument(skip_all)]
 async fn update_instance_software(
   pool: &mut DbPool<'_>,
   client: &ClientWithMiddleware,
@@ -573,6 +583,7 @@ async fn update_instance_software(
 /// This builds an instance update form, for a given domain.
 /// If the instance sends a response, but doesn't have a well-known or nodeinfo,
 /// Then return a default form with only the updated field.
+#[tracing::instrument(skip(client))]
 async fn build_update_instance_form(
   domain: &str,
   client: &ClientWithMiddleware,
