@@ -56,6 +56,12 @@ pub struct Settings {
   cors_origin: Option<String>,
   /// Print logs in JSON format. You can also disable ANSI colors in logs with env var `NO_COLOR`.
   pub json_logging: bool,
+
+  /// Native automod configuration
+  /// All variables inside are empty/false by default
+  #[default(Default::default())]
+  #[doku(example = "Default::default()")]
+  pub fhf_automod_config: FhfAutomodConfig,
 }
 
 impl Settings {
@@ -261,4 +267,23 @@ pub struct FederationWorkerConfig {
   /// per second) and if a receiving instance is not keeping up.
   #[default(1)]
   pub concurrent_sends_per_instance: i8,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone, Document, SmartDefault)]
+#[serde(deny_unknown_fields)]
+pub struct FhfAutomodConfig {
+  /// Username of a local user used as actor for automated moderation actions.
+  /// This user should be an instance moderator, although this is not enforced.
+  /// Federation compatibility with non-admin users is unknown.
+  /// Required for most native automod functionality
+  #[default(None)]
+  #[doku(example = "automod")]
+  pub actor_username: Option<String>,
+
+  /// This enables the scheduled task for resolving any reports about removed content when the
+  /// creator is banned or deleted and the reported content is removed or deleted.
+  /// Reports that were unresolved will not be touched by this.
+  /// Requires actor_username to be set.
+  #[default(false)]
+  pub resolve_banned_or_deleted_creators_reports: bool,
 }
