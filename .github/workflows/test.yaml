@@ -21,7 +21,7 @@ jobs:
 
     services:
       database:
-        image: postgres:17-alpine
+        image: postgres:16-alpine
         env:
           POSTGRES_USER: lemmy
           POSTGRES_PASSWORD: password
