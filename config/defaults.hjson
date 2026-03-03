@@ -150,5 +150,9 @@
     # Reports that were unresolved will not be touched by this.
     # Requires actor_username to be set.
     resolve_banned_or_deleted_creators_reports: false
+    # Set this to a number of days to enable automatic bans of users deleting their account within
+    # that many days of signup. Bans include content removal.
+    # Requires actor_username to be set.
+    ban_deleted_persons_created_within_days: 7
   }
 }

@@ -266,6 +266,141 @@ async fn receive_delete_action(
         purge_user_account(person.id, context).await?;
       } else {
         Person::delete_account(&mut context.pool(), person.id).await?;
+
+        // FHF anti-spam measure
+        if let Some(account_age_threshold) = context
+          .settings()
+          .fhf_automod_config
+          .ban_deleted_persons_created_within_days
+        {
+          if person.published
+            > lemmy_db_schema::utils::naive_now() - chrono::Days::new(account_age_threshold)
+          {
+            tracing::info!(
+        "[FHF AutoMod][BanFederatedDeletedUser] Issuing ban for deletion of recently created user {}",
+        person.actor_id
+      );
+
+            if let Some(automod_username) = &context.settings().fhf_automod_config.actor_username {
+              // keep these here to minimize risk of merge conflicts with upstream
+              use lemmy_api_common::{
+                community::BanFromCommunity,
+                send_activity::{ActivityChannel, SendActivityData},
+                utils::remove_user_data,
+              };
+              use lemmy_db_schema::{
+                source::{
+                  community::{
+                    CommunityFollower,
+                    CommunityFollowerForm,
+                    CommunityPersonBan,
+                    CommunityPersonBanForm,
+                  },
+                  moderator::{ModBan, ModBanForm, ModBanFromCommunity, ModBanFromCommunityForm},
+                  person::PersonUpdateForm,
+                },
+                traits::{Bannable, Followable},
+              };
+              use lemmy_db_views::structs::LocalUserView;
+              use lemmy_utils::error::LemmyErrorExt;
+
+              // todo: this might be better to just log and not return an error
+              let automod_local_user_view =
+                LocalUserView::read_from_name(&mut context.pool(), automod_username.as_str())
+                  .await?
+                  .ok_or(LemmyErrorType::CouldntFindPerson)?;
+
+              let person = Person::update(
+                &mut context.pool(),
+                person.id,
+                &PersonUpdateForm {
+                  banned: Some(true),
+                  ban_expires: Some(None),
+                  ..Default::default()
+                },
+              )
+              .await
+              .with_lemmy_type(LemmyErrorType::CouldntUpdateUser)?;
+
+              remove_user_data(person.id, context).await?;
+
+              let reason = Some("automod".to_string());
+
+              let form = ModBanForm {
+                mod_person_id: automod_local_user_view.person.id,
+                other_person_id: person.id,
+                reason: reason.clone(),
+                banned: Some(true),
+                expires: None,
+              };
+
+              ModBan::create(&mut context.pool(), &form).await?;
+
+              // this is basically lemmy_api::ban_nonlocal_user_from_local_communities()
+              let ids = Person::list_local_community_ids(&mut context.pool(), person.id).await?;
+
+              for community_id in ids {
+                // Ban them from our local communities
+                let community_user_ban_form = CommunityPersonBanForm {
+                  community_id,
+                  person_id: person.id,
+                  expires: None,
+                };
+
+                // Ignore all errors for these
+                CommunityPersonBan::ban(&mut context.pool(), &community_user_ban_form)
+                  .await
+                  .ok();
+
+                // Also unsubscribe them from the community, if they are subscribed
+                let community_follower_form = CommunityFollowerForm {
+                  community_id,
+                  person_id: person.id,
+                  pending: false,
+                };
+
+                CommunityFollower::unfollow(&mut context.pool(), &community_follower_form)
+                  .await
+                  .ok();
+
+                // Mod tables
+                let form = ModBanFromCommunityForm {
+                  mod_person_id: automod_local_user_view.person.id,
+                  other_person_id: person.id,
+                  community_id,
+                  reason: reason.clone(),
+                  banned: Some(true),
+                  expires: None,
+                };
+
+                ModBanFromCommunity::create(&mut context.pool(), &form).await?;
+
+                // Federate the ban from community
+                let ban_from_community = BanFromCommunity {
+                  community_id,
+                  person_id: person.id,
+                  ban: true,
+                  reason: reason.clone(),
+                  remove_data: Some(true),
+                  expires: None,
+                };
+
+                ActivityChannel::submit_activity(
+                  SendActivityData::BanFromCommunity {
+                    moderator: automod_local_user_view.person.clone(),
+                    community_id,
+                    target: person.clone(),
+                    data: ban_from_community,
+                  },
+                  context,
+                )
+                .await?;
+              }
+            } else {
+              tracing::error!("[FHF AutoMod][BanFederatedDeletedUser] Unable to ban user: no automod user defined in configuration");
+            }
+          }
+        }
       }
     }
     DeletableObjects::Post(post) => {
