@@ -286,4 +286,11 @@ pub struct FhfAutomodConfig {
   /// Requires actor_username to be set.
   #[default(false)]
   pub resolve_banned_or_deleted_creators_reports: bool,
+
+  /// Set this to a number of days to enable automatic bans of users deleting their account within
+  /// that many days of signup. Bans include content removal.
+  /// Requires actor_username to be set.
+  #[default(None)]
+  #[doku(example = "7")]
+  pub ban_deleted_persons_created_within_days: Option<u64>,
 }
