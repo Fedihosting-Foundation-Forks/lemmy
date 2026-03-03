@@ -38,6 +38,7 @@ use lemmy_utils::{error::LemmyResult, settings::structs::Settings};
 use tracing::info;
 use url::Url;
 
+#[tracing::instrument(skip_all)]
 pub async fn run_advanced_migrations(
   pool: &mut DbPool<'_>,
   settings: &Settings,
