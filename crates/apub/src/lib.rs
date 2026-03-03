@@ -77,7 +77,8 @@ impl UrlVerifier for VerifyUrlData {
 /// - the correct scheme (either http or https)
 /// - URL being in the allowlist (if it is active)
 /// - URL not being in the blocklist (if it is active)
-#[tracing::instrument(skip(local_site_data))]
+// tracing this generates a very large amount of traces
+//#[tracing::instrument(skip(local_site_data))]
 fn check_apub_id_valid(apub_id: &Url, local_site_data: &LocalSiteData) -> LemmyResult<()> {
   let domain = apub_id
     .domain()

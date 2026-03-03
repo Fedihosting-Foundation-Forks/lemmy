@@ -19,6 +19,7 @@ pub mod translations {
 
 type AsyncSmtpTransport = lettre::AsyncSmtpTransport<lettre::Tokio1Executor>;
 
+#[tracing::instrument(skip(html, settings))]
 pub async fn send_email(
   subject: &str,
   to_email: &str,
