@@ -34,7 +34,7 @@ impl EmailVerification {
     let conn = &mut get_conn(pool).await?;
     email_verification
       .filter(verification_token.eq(token))
-      .filter(published.gt(now.into_sql::<Timestamptz>() - 7.days()))
+      .filter(published.gt(now.into_sql::<Timestamptz>() - 90.days()))
       .first(conn)
       .await
       .optional()
