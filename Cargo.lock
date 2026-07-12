@@ -1633,8 +1633,22 @@ checksum = "51a307ac00f7c23f526a04a77761a0519b9f0eb2838ebf5b905a58580095bdcb"
 dependencies = [
  "async-trait",
  "bb8",
+ "diesel",
+ "futures-util",
+ "scoped-futures",
+ "tokio",
+ "tokio-postgres",
+]
+
+[[package]]
+name = "diesel-async"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7fcc26599f590c7e5b182a05061cfb445f216bb069df72eb31f38cffde8ca598"
+dependencies = [
  "deadpool",
  "diesel",
+ "futures-core",
  "futures-util",
  "scoped-futures",
  "tokio",
@@ -3176,7 +3190,7 @@ dependencies = [
  "bcrypt",
  "captcha",
  "chrono",
- "diesel-async",
+ "diesel-async 0.6.1",
  "elementtree",
  "hound",
  "lemmy_api_common",
@@ -3244,7 +3258,7 @@ dependencies = [
  "anyhow",
  "bcrypt",
  "chrono",
- "diesel-async",
+ "diesel-async 0.6.1",
  "futures",
  "lemmy_api_common",
  "lemmy_db_schema",
@@ -3302,7 +3316,7 @@ dependencies = [
  "anyhow",
  "clap",
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "lemmy_db_schema",
  "lemmy_db_views",
  "lemmy_utils",
@@ -3322,7 +3336,7 @@ dependencies = [
  "deadpool",
  "derive-new",
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "diesel-derive-enum",
  "diesel-derive-newtype",
  "diesel_ltree",
@@ -3356,7 +3370,7 @@ dependencies = [
  "actix-web",
  "chrono",
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "diesel_ltree",
  "i-love-jesus",
  "lemmy_db_schema",
@@ -3377,7 +3391,7 @@ version = "0.19.19-jemalloc"
 dependencies = [
  "chrono",
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "lemmy_db_schema",
  "lemmy_db_views",
  "lemmy_utils",
@@ -3396,7 +3410,7 @@ name = "lemmy_db_views_moderator"
 version = "0.19.19-jemalloc"
 dependencies = [
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "lemmy_db_schema",
  "serde",
  "serde_with",
@@ -3413,7 +3427,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "futures",
  "lemmy_api_common",
  "lemmy_apub",
@@ -3472,7 +3486,7 @@ dependencies = [
  "clokwerk",
  "console-subscriber",
  "diesel",
- "diesel-async",
+ "diesel-async 0.6.1",
  "futures-util",
  "lemmy_api",
  "lemmy_api_common",
@@ -4571,7 +4585,7 @@ dependencies = [
  "console-subscriber",
  "dashmap",
  "diesel",
- "diesel-async",
+ "diesel-async 0.5.2",
  "diesel-derive-enum",
  "fjall",
  "futures-core",
